@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ed's Own Booper</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Html5-Qrcode Library -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    
+    <style>
+        /* Custom scrollbar elimination for clean rugged industrial views */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* Native Print Layout configuration */
+        @page {
+            size: letter portrait;
+            margin: 0.5in;
+        }
+        @media print {
+            body {
+                background: white !important;
+                color: black !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+            .no-print {
+                display: none !important;
+            }
+            .print-only {
+                display: block !important;
+            }
+            /* Force exactly one Letter-sized page per shelf item (0.5in margins applied) */
+            .print-page-break {
+                page-break-after: always;
+                break-after: page;
+                height: 9.8in;
+                max-height: 9.8in;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+                box-sizing: border-box;
+                padding: 0.25in !important;
+                overflow: hidden;
+            }
+        }
+        @media screen {
+            .print-only {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col font-sans">
+
+    <!-- SECURE CONTEXT WARNING BANNER (Only visible if Webview blocks camera API due to HTTP) -->
+    <div id="secure-context-warning" class="hidden bg-amber-600 text-white p-3 text-center text-xs font-bold z-[100] no-print">
+        ⚠️ INSECURE SYSTEM DETECTED: This app is not running over HTTPS or localhost. Most Kiosk WebViews will block the live camera. Please deploy to an HTTPS server or use the "File Scan" fallback below.
+    </div>
+
+    <!-- TOP HEADER (No-Print) -->
+    <header class="bg-indigo-900 text-white shadow-md p-4 sticky top-0 z-50 no-print">
+        <div class="max-w-5xl mx-auto flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <div class="p-2 bg-indigo-700 rounded-lg">
+                    <!-- Scanner / Laser Icon -->
+                    <svg class="w-6 h-6 text-indigo-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h.01M16 20h2a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2h2"></path></svg>
+                </div>
+                <div>
+                    <h1 class="font-black text-xl tracking-tight leading-tight">Ed's Own Booper</h1>
+                    <p class="text-[10px] text-indigo-200 font-bold uppercase tracking-wider">Supercharged Offline Scan &amp; Document Utility</p>
+                </div>
+            </div>
+            
+            <!-- Quick Workflow Switcher -->
+            <div class="flex space-x-1 bg-indigo-950 p-1 rounded-lg border border-indigo-800">
+                <button onclick="setWorkflow('shelf')" id="tab-shelf" class="px-4 py-2 text-xs font-bold rounded-md transition-all bg-indigo-600 text-white">
+                    Shelf Tag Order
+                </button>
+                <button onclick="setWorkflow('recipe')" id="tab-recipe" class="px-4 py-2 text-xs font-bold rounded-md transition-all text-indigo-300 hover:text-white">
+                    Recipe Cost List
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- WORKSPACE CONTAINER (No-Print) -->
+    <main class="max-w-5xl w-full mx-auto p-4 flex-grow flex flex-col gap-6 no-print">
+        
+        <!-- Live Camera Viewport Module -->
+        <section class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="p-4 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <div class="flex items-center space-x-2">
+                    <span class="w-2.5 h-2.5 bg-green-500 rounded-full animate-ping"></span>
+                    <h2 class="font-bold text-xs uppercase tracking-wider text-slate-500">Live Hardware Camera Scanner</h2>
+                </div>
+                
+                <div class="flex items-center space-x-2 w-full sm:w-auto">
+                    <!-- Camera Selection Dropdown for Webview compatibility -->
+                    <select id="camera-select" class="bg-white border border-slate-300 text-xs rounded-lg p-1.5 max-w-[180px] font-semibold text-slate-700 focus:ring-1 focus:ring-indigo-500">
+                        <option value="">Querying Cameras...</option>
+                    </select>
+                    <button onclick="toggleScanner()" id="scanner-toggle-btn" class="px-4 py-1.5 text-xs font-extrabold rounded-full bg-indigo-100 text-indigo-700 hover:bg-indigo-200 transition">
+                        Toggle Scanner
+                    </button>
+                </div>
+            </div>
+            
+            <div class="p-4 flex flex-col items-center">
+                <div id="scanner-container" class="w-full max-w-md aspect-video bg-slate-900 rounded-xl overflow-hidden relative border-2 border-dashed border-slate-300 flex flex-col justify-center items-center text-slate-500">
+                    <div id="reader" class="w-full h-full"></div>
+                    <div id="scanner-placeholder" class="absolute inset-0 flex flex-col justify-center items-center bg-slate-950 p-4 text-center">
+                        <svg class="w-12 h-12 text-slate-700 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2h2"></path></svg>
+                        <p class="text-sm font-bold text-slate-400">Booper Scanner Offline</p>
+                        <p class="text-xs text-slate-500 mt-1">Camera blocked in Webview? Try selecting a camera above, or use file uploads below.</p>
+                        
+                        <!-- Webview Camera Fallback input -->
+                        <div class="mt-4">
+                            <input type="file" id="scan-fallback-file" accept="image/*" class="hidden" onchange="scanImageFile(this)">
+                            <button onclick="document.getElementById('scan-fallback-file').click()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black px-4 py-2 rounded-lg shadow-md transition">
+                                📸 Take Picture &amp; Scan Barcode
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <!-- Instant scanned code HUD feedback toast -->
+                <div id="scanned-toast" class="mt-3 hidden bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-md transition-all transform scale-95 flex items-center space-x-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
+                    <span id="toast-message">Code Auto-Captured!</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Dynamic Entry & Verification Panel -->
+        <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+            <h3 class="font-bold text-lg text-slate-900 border-b border-slate-150 pb-3 mb-4 flex items-center justify-between">
+                <span>Active Form Entry</span>
+                <span id="workflow-badge" class="text-xs bg-indigo-100 text-indigo-800 py-1.5 px-3 rounded-full uppercase tracking-wider font-extrabold">Shelf Tag Order</span>
+            </h3>
+
+            <form id="workflow-form" onsubmit="event.preventDefault(); saveActiveRecord();" class="space-y-6">
+                <!-- Smart Codes Input Grid -->
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    <div class="relative col-span-2 md:col-span-1">
+                        <label class="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-1">Source / Supplier</label>
+                        <input type="text" id="field-source" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:bg-white transition font-semibold" placeholder="e.g. Costco, Farm">
+                    </div>
+                    <div class="relative">
+                        <label class="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-1">UPC / EAN</label>
+                        <input type="text" id="field-upc" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:bg-white font-mono transition" placeholder="Standard Barcode">
+                        <span id="indicator-upc" class="absolute right-3 top-8 hidden text-emerald-600 font-bold text-[9px] bg-emerald-50 px-1 py-0.5 rounded">AUTO</span>
+                    </div>
+                    <div class="relative">
+                        <label class="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-1">PLU Code</label>
+                        <input type="text" id="field-plu" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:bg-white font-mono transition" placeholder="Produce item">
+                        <span id="indicator-plu" class="absolute right-3 top-8 hidden text-emerald-600 font-bold text-[9px] bg-emerald-50 px-1 py-0.5 rounded">AUTO</span>
+                    </div>
+                    <div class="relative">
+                        <label class="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-1">ISBN Book</label>
+                        <input type="text" id="field-isbn" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:bg-white font-mono transition" placeholder="Books">
+                        <span id="indicator-isbn" class="absolute right-3 top-8 hidden text-emerald-600 font-bold text-[9px] bg-emerald-50 px-1 py-0.5 rounded">AUTO</span>
+                    </div>
+                    <div class="relative col-span-2 md:col-span-1">
+                        <label class="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-1">QR Code / URL</label>
+                        <input type="text" id="field-qr" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:bg-white font-mono transition" placeholder="Alphanumeric">
+                        <span id="indicator-qr" class="absolute right-3 top-8 hidden text-emerald-600 font-bold text-[9px] bg-emerald-50 px-1 py-0.5 rounded">AUTO</span>
+                    </div>
+                </div>
+
+                <!-- DYNAMIC WORKFLOW FIELD WRAPPERS -->
+                
+                <!-- 1. Shelf Tag Order Fields -->
+                <div id="group-shelf" class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Aisle / Shelf Location</label>
+                            <input type="text" id="shelf-location" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:bg-white" placeholder="e.g. Aisle 14 - Section D">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Additional Notes</label>
+                            <input type="text" id="shelf-notes" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:bg-white" placeholder="Damaged tags, restocking count, pricing revisions, etc.">
+                        </div>
+                    </div>
+                    
+                    <!-- Double Camera Capture Interface -->
+                    <div class="grid grid-cols-2 gap-4 pt-2">
+                        <!-- Image 1: Front of Item -->
+                        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col items-center justify-center text-center relative group min-h-[160px]">
+                            <input type="file" id="camera-front" accept="image/*" capture="environment" class="hidden" onchange="compressAndStoreImage(this, 'front-preview', 'front-data')">
+                            <input type="hidden" id="front-data">
+                            
+                            <div id="front-placeholder" class="space-y-2 cursor-pointer flex flex-col items-center" onclick="document.getElementById('camera-front').click()">
+                                <div class="p-3 bg-indigo-50 rounded-full text-indigo-600">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                                </div>
+                                <span class="block text-xs font-bold text-slate-600 uppercase">1. Take Front Photo</span>
+                                <span class="block text-[10px] text-slate-400">Capture overall item packaging</span>
+                            </div>
+                            <div id="front-preview-container" class="absolute inset-0 rounded-xl overflow-hidden hidden">
+                                <img id="front-preview" class="w-full h-full object-cover" src="">
+                                <button type="button" onclick="clearImage('camera-front', 'front-preview', 'front-data', 'front-placeholder', 'front-preview-container')" class="absolute top-2 right-2 bg-red-600 text-white rounded-full p-1.5 shadow-md hover:bg-red-700">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Image 2: Barcode Close-up -->
+                        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col items-center justify-center text-center relative group min-h-[160px]">
+                            <input type="file" id="camera-barcode" accept="image/*" capture="environment" class="hidden" onchange="compressAndStoreImage(this, 'barcode-preview', 'barcode-data')">
+                            <input type="hidden" id="barcode-data">
+                            
+                            <div id="barcode-placeholder" class="space-y-2 cursor-pointer flex flex-col items-center" onclick="document.getElementById('camera-barcode').click()">
+                                <div class="p-3 bg-indigo-50 rounded-full text-indigo-600">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h.01M16 20h2a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2h2"></path></svg>
+                                </div>
+                                <span class="block text-xs font-bold text-slate-600 uppercase">2. Take Tag Photo</span>
+                                <span class="block text-[10px] text-slate-400">Capture close-up price/barcode</span>
+                            </div>
+                            <div id="barcode-preview-container" class="absolute inset-0 rounded-xl overflow-hidden hidden">
+                                <img id="barcode-preview" class="w-full h-full object-cover" src="">
+                                <button type="button" onclick="clearImage('camera-barcode', 'barcode-preview', 'barcode-data', 'barcode-placeholder', 'barcode-preview-container')" class="absolute top-2 right-2 bg-red-600 text-white rounded-full p-1.5 shadow-md hover:bg-red-700">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. Recipe List Fields -->
+                <div id="group-recipe" class="hidden space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Price ($ USD)</label>
+                            <input type="number" step="0.01" id="recipe-price" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:bg-white" placeholder="0.00">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Quantity Purchased</label>
+                            <input type="text" id="recipe-qty" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:bg-white" placeholder="e.g. 5 lbs, 3 bags, 4 units">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Ingredient / Role in Recipe</label>
+                            <input type="text" id="recipe-role" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:bg-white" placeholder="e.g. Flour Base, Spice Pack">
+                        </div>
+                    </div>
+
+                    <!-- Recipe Ingredient Photo Interface -->
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col items-center justify-center text-center relative group min-h-[160px] max-w-sm mx-auto mt-2">
+                        <input type="file" id="camera-recipe" accept="image/*" capture="environment" class="hidden" onchange="compressAndStoreImage(this, 'recipe-preview', 'recipe-img-data')">
+                        <input type="hidden" id="recipe-img-data">
+                        
+                        <div id="recipe-placeholder" class="space-y-2 cursor-pointer flex flex-col items-center" onclick="document.getElementById('camera-recipe').click()">
+                            <div class="p-3 bg-indigo-50 rounded-full text-indigo-600">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                            </div>
+                            <span class="block text-xs font-bold text-slate-600 uppercase">Capture Ingredient Photo</span>
+                            <span class="block text-[10px] text-slate-400">Optional: Snap packaging or product label</span>
+                        </div>
+                        <div id="recipe-preview-container" class="absolute inset-0 rounded-xl overflow-hidden hidden">
+                            <img id="recipe-preview" class="w-full h-full object-cover" src="">
+                            <button type="button" onclick="clearImage('camera-recipe', 'recipe-preview', 'recipe-img-data', 'recipe-placeholder', 'recipe-preview-container')" class="absolute top-2 right-2 bg-red-600 text-white rounded-full p-1.5 shadow-md hover:bg-red-700">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Submission Controls -->
+                <div class="flex justify-between items-center pt-4 border-t border-slate-100">
+                    <button type="button" onclick="clearActiveForm()" class="px-5 py-3 text-sm font-bold text-slate-500 hover:text-slate-800 transition">
+                        Clear Entry
+                    </button>
+                    <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-8 py-3.5 rounded-xl shadow-lg shadow-indigo-100 transition duration-150 transform active:scale-95">
+                        Log Entry to List
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <!-- Current Logged Records Database Section -->
+        <section class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex-grow flex flex-col">
+            <div class="p-5 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                    <h3 class="font-bold text-slate-950 text-base flex items-center space-x-2">
+                        <span>Current Session Registry</span>
+                        <span id="record-count" class="bg-indigo-600 text-white text-xs px-2.5 py-0.5 rounded-full font-black">0</span>
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-0.5">Records are persisted automatically to local browser Indexed Memory.</p>
+                </div>
+                <div class="flex space-x-2 w-full sm:w-auto">
+                    <button onclick="clearDatabase()" class="flex-1 sm:flex-none border border-red-200 hover:bg-red-50 text-red-700 px-4 py-2 rounded-xl text-xs font-bold transition">
+                        Clear Registry
+                    </button>
+                    <button onclick="triggerPrintExport()" class="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-xl text-xs font-extrabold shadow transition">
+                        Export Document
+                    </button>
+                </div>
+            </div>
+
+            <!-- Dynamic Records Table -->
+            <div class="overflow-x-auto flex-grow max-h-[400px] no-scrollbar">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-100/50 text-slate-400 font-extrabold text-[10px] uppercase tracking-wider border-b border-slate-200">
+                            <th class="p-4 w-16">Item</th>
+                            <th class="p-4">Identified Codes</th>
+                            <th class="p-4" id="table-header-dynamic-1">Location Details</th>
+                            <th class="p-4" id="table-header-dynamic-2">Notes</th>
+                            <th class="p-4 w-12 text-center">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="registry-table-body" class="divide-y divide-slate-100 text-sm">
+                        <!-- Dynamic Records populated here -->
+                    </tbody>
+                </table>
+                <div id="no-records-placeholder" class="p-12 text-center text-slate-400 space-y-2">
+                    <svg class="w-12 h-12 mx-auto text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                    <p class="font-semibold text-slate-400 text-sm">No items logged yet.</p>
+                    <p class="text-xs text-slate-300">Scan barcodes or use manual entries above to construct your document.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- FOOTER (No-Print) -->
+    <footer class="bg-slate-900 text-slate-500 text-center py-6 text-xs border-t border-slate-800 no-print">
+        <p class="font-semibold text-slate-400">Ed's Own Booper Production System</p>
+        <p class="mt-1 text-slate-600">Built to process and persist structured data completely offline.</p>
+    </footer>
+
+    <!-- PRINT VIEW SHEETS (Generated on layout print triggered by `window.print()`) -->
+    <div class="print-only p-0 bg-white min-h-screen">
+        <!-- 1. SHELF TAG PRINT OUT (1 Full Page per Item) -->
+        <div id="print-sheet-shelf" class="hidden">
+            <!-- Dynamically populated page-by-page. Each page is a distinct Letter Sheet -->
+            <div id="print-shelf-pages"></div>
+        </div>
+
+        <!-- 2. RECIPE LIST PRINT OUT -->
+        <div id="print-sheet-recipe" class="hidden space-y-6 p-8">
+            <div class="border-b-4 border-slate-900 pb-4 mb-6 flex justify-between items-end">
+                <div>
+                    <h1 class="text-3xl font-black text-slate-950 tracking-tight uppercase">Recipe Formulation &amp; Cost Sheet</h1>
+                    <p class="text-xs text-slate-500 font-semibold uppercase tracking-wider">Kitchen Production Ingredient Accounting Ledger</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-xs font-bold text-slate-500 uppercase">Printed Date</p>
+                    <p class="text-sm font-extrabold text-slate-900" id="print-recipe-date"></p>
+                </div>
+            </div>
+
+            <!-- Recipe Records Output Table -->
+            <table class="w-full text-left border-collapse border border-slate-300">
+                <thead>
+                    <tr class="bg-slate-100 text-slate-800 font-black text-xs uppercase border-b-2 border-slate-400">
+                        <th class="p-3 border border-slate-300 w-16 text-center">Ref Image</th>
+                        <th class="p-3 border border-slate-300">Ingredient / Role</th>
+                        <th class="p-3 border border-slate-300">Source / Supplier</th>
+                        <th class="p-3 border border-slate-300 w-1/4">Codes Detected</th>
+                        <th class="p-3 border border-slate-300 text-right">Unit Price</th>
+                        <th class="p-3 border border-slate-300 text-right">Qty</th>
+                        <th class="p-3 border border-slate-300 text-right">Subtotal</th>
+                    </tr>
+                </thead>
+                <tbody id="print-recipe-tbody" class="text-xs divide-y divide-slate-300">
+                    <!-- Recipe rows rendered dynamically -->
+                </tbody>
+            </table>
+
+            <!-- Recipe Summary Calculations Block (Accounting Style) -->
+            <div class="border-2 border-slate-900 p-6 bg-slate-50/50 rounded-xl max-w-md ml-auto space-y-4 print-page-avoid">
+                <h4 class="font-extrabold text-xs uppercase tracking-wider border-b-2 border-slate-900 pb-2 text-slate-900">Cost Summary Metrics</h4>
+                <div class="space-y-3 text-sm">
+                    <div class="flex justify-between font-black text-base text-indigo-950">
+                        <span>Total Ingredient Expense:</span>
+                        <span id="print-total-cost">$0.00</span>
+                    </div>
+                    <div class="flex justify-between items-center border-t border-dashed border-slate-400 pt-3">
+                        <span class="font-bold text-slate-600 text-xs uppercase">Total Servings Prepared:</span>
+                        <div class="w-32 border-b-2 border-slate-900 h-6"></div>
+                    </div>
+                    <div class="flex justify-between items-center pt-2">
+                        <span class="font-bold text-slate-600 text-xs uppercase">Calculated Food Cost / Serving:</span>
+                        <div class="w-32 border-b-2 border-slate-900 h-6"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- BUSINESS LOGIC & OFFLINE STORAGE ENGINE -->
+    <script>
+        // Global State & Persistent Storage Keys
+        let currentWorkflow = 'shelf'; // 'shelf' | 'recipe'
+        let database = { shelf: [], recipe: [] };
+        let scannerActive = false;
+        let html5QrCode = null;
+
+        // Auto-initialize on Window Load
+        window.onload = function() {
+            // Check secure context
+            if (!window.isSecureContext) {
+                document.getElementById('secure-context-warning').classList.remove('hidden');
+            }
+
+            // Load from storage
+            const loadedData = localStorage.getItem('rugged_scanner_db');
+            if (loadedData) {
+                try {
+                    database = JSON.parse(loadedData);
+                    // Standard fallback array check
+                    if (!database.shelf) database.shelf = [];
+                    if (!database.recipe) database.recipe = [];
+                } catch(e) {
+                    console.error("Local database reset triggered due to corrupted schema.");
+                }
+            }
+            renderTable();
+            queryAvailableCameras();
+        }
+
+        // Active State Switches
+        function setWorkflow(type) {
+            const tabShelf = document.getElementById('tab-shelf');
+            const tabRecipe = document.getElementById('tab-recipe');
+            const badge = document.getElementById('workflow-badge');
+            const groupShelf = document.getElementById('group-shelf');
+            const groupRecipe = document.getElementById('group-recipe');
+            
+            const tableH1 = document.getElementById('table-header-dynamic-1');
+            const tableH2 = document.getElementById('table-header-dynamic-2');
+
+            if (type === 'shelf') {
+                currentWorkflow = 'shelf';
+                tabShelf.className = "px-4 py-2 text-xs font-bold rounded-md transition-all bg-indigo-600 text-white";
+                tabRecipe.className = "px-4 py-2 text-xs font-bold rounded-md transition-all text-indigo-300 hover:text-white";
+                badge.innerText = "Shelf Tag Order";
+                groupShelf.classList.remove('hidden');
+                groupRecipe.classList.add('hidden');
+                tableH1.innerText = "Location Details";
+                tableH2.innerText = "Notes / Images";
+            } else {
+                currentWorkflow = 'recipe';
+                tabRecipe.className = "px-4 py-2 text-xs font-bold rounded-md transition-all bg-indigo-600 text-white";
+                tabShelf.className = "px-4 py-2 text-xs font-bold rounded-md transition-all text-indigo-300 hover:text-white";
+                badge.innerText = "Recipe List";
+                groupShelf.classList.add('hidden');
+                groupRecipe.classList.remove('hidden');
+                tableH1.innerText = "Ingredient / Role";
+                tableH2.innerText = "Accounting Metrics / Images";
+            }
+            
+            clearActiveForm();
+            renderTable();
+        }
+
+        // Camera Code Processing Engine (Handles UPC, PLU, ISBN, and QR Codes intelligently)
+        function analyzeScannedCode(code) {
+            const rawCode = code.trim();
+            clearIndicators();
+
+            let targetField = '';
+            
+            // Auto detection heuristics
+            if (/^\d{4,5}$/.test(rawCode)) {
+                // PLUs are usually 4 or 5 digits
+                targetField = 'plu';
+            } else if ((rawCode.startsWith('978') || rawCode.startsWith('979')) && rawCode.length === 13) {
+                // EAN Books ISBN starting with 978/979
+                targetField = 'isbn';
+            } else if (/^\d{10}$/.test(rawCode)) {
+                // Standard 10-digit legacy ISBN/UPC fallback
+                targetField = 'isbn';
+            } else if (/^\d{12}$/.test(rawCode) || /^\d{13}$/.test(rawCode) || /^\d{8}$/.test(rawCode)) {
+                // Standard Global Trade Item Numbers (UPC-A, EAN-13, EAN-8)
+                targetField = 'upc';
+            } else {
+                // Alphanumeric URL string or structural layouts
+                targetField = 'qr';
+            }
+
+            // Fill & Set highlight feedback loop
+            const field = document.getElementById(`field-${targetField}`);
+            if (field) {
+                field.value = rawCode;
+                const indicator = document.getElementById(`indicator-${targetField}`);
+                if (indicator) indicator.classList.remove('hidden');
+                
+                // Play feedback success toast
+                triggerToast(`Captured to ${targetField.toUpperCase()}!`);
+            }
+        }
+
+        // Resets the indicator pill flags
+        function clearIndicators() {
+            ['upc', 'plu', 'isbn', 'qr'].forEach(id => {
+                document.getElementById(`indicator-${id}`).classList.add('hidden');
+            });
+        }
+
+        // Toast Popup Trigger
+        function triggerToast(message) {
+            const toast = document.getElementById('scanned-toast');
+            document.getElementById('toast-message').innerText = message;
+            toast.classList.remove('hidden');
+            toast.classList.remove('scale-95');
+            toast.classList.add('scale-100');
+            setTimeout(() => {
+                toast.classList.add('scale-95');
+                setTimeout(() => toast.classList.add('hidden'), 200);
+            }, 3000);
+        }
+
+        // Query Available Hardware Cameras
+        function queryAvailableCameras() {
+            const select = document.getElementById('camera-select');
+            Html5Qrcode.getCameras().then(devices => {
+                select.innerHTML = '';
+                if (devices && devices.length > 0) {
+                    devices.forEach((device, index) => {
+                        const option = document.createElement('option');
+                        option.value = device.id;
+                        option.text = device.label || `Camera ${index + 1}`;
+                        select.appendChild(option);
+                    });
+                } else {
+                    const option = document.createElement('option');
+                    option.value = "";
+                    option.text = "No cameras detected";
+                    select.appendChild(option);
+                }
+            }).catch(err => {
+                console.error("Camera query error: ", err);
+                select.innerHTML = '<option value="">Permission Blocked</option>';
+            });
+        }
+
+        // Scan direct uploaded photo using offline canvas decoding logic (Bypasses WebView Camera lockouts)
+        function scanImageFile(fileInput) {
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            const tempScanner = new Html5Qrcode("reader");
+            tempScanner.scanFile(file, true)
+                .then(decodedText => {
+                    analyzeScannedCode(decodedText);
+                    tempScanner.clear();
+                })
+                .catch(err => {
+                    alert("Could not detect a clear barcode in this photo. Please hold the camera closer, avoid glare, and try again.");
+                    tempScanner.clear();
+                });
+        }
+
+        // Camera Scanner Control Loop
+        function toggleScanner() {
+            const placeholder = document.getElementById('scanner-placeholder');
+            const toggleBtn = document.getElementById('scanner-toggle-btn');
+            const selectedCameraId = document.getElementById('camera-select').value;
+            
+            if (scannerActive) {
+                // Close scanner stream safely
+                if (html5QrCode) {
+                    html5QrCode.stop().then(() => {
+                        scannerActive = false;
+                        placeholder.classList.remove('hidden');
+                        toggleBtn.innerText = "Toggle Scanner";
+                        toggleBtn.className = "px-4 py-1.5 text-xs font-extrabold rounded-full bg-indigo-100 text-indigo-700 hover:bg-indigo-200 transition";
+                    }).catch(err => console.error("Scanner closure failure:", err));
+                }
+            } else {
+                // Spin up hardware camera element
+                placeholder.classList.add('hidden');
+                toggleBtn.innerText = "Shut Down Scanner";
+                toggleBtn.className = "px-4 py-1.5 text-xs font-extrabold rounded-full bg-red-100 text-red-700 hover:bg-red-200 transition";
+                
+                html5QrCode = new Html5Qrcode("reader");
+                const config = { 
+                    fps: 15, 
+                    qrbox: function(width, height) {
+                        return { width: Math.min(width * 0.8, 300), height: Math.min(height * 0.5, 180) };
+                    }
+                };
+
+                // Use the selected camera ID from the dropdown list to guarantee Kiosk browser hook-ins
+                const cameraConstraint = selectedCameraId ? { deviceId: { exact: selectedCameraId } } : { facingMode: "environment" };
+
+                html5QrCode.start(
+                    cameraConstraint, 
+                    config,
+                    (decodedText) => {
+                        analyzeScannedCode(decodedText);
+                    },
+                    (errorMessage) => {
+                        // Scan errors happen regularly when reading empty space
+                    }
+                ).then(() => {
+                    scannerActive = true;
+                }).catch(err => {
+                    console.error("Camera permissions check or connection failed:", err);
+                    placeholder.classList.remove('hidden');
+                    toggleBtn.innerText = "Toggle Scanner";
+                    toggleBtn.className = "px-4 py-1.5 text-xs font-extrabold rounded-full bg-indigo-100 text-indigo-700 hover:bg-indigo-200 transition";
+                    alert("Kiosk Camera Access Blocked. Please check your context is HTTPS, or use the 'Take Picture' file button directly below.");
+                });
+            }
+        }
+
+        // On-Device Image Compression (High fidelity 600px canvas for printed scannability)
+        function compressAndStoreImage(fileInput, imgElementId, hiddenInputId) {
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    
+                    // Barcode tags need extreme sharpness to scan directly off the printed paper sheets
+                    const maxDim = imgElementId.includes('barcode') ? 600 : 400;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > maxDim) {
+                            height *= maxDim / width;
+                            width = maxDim;
+                        }
+                    } else {
+                        if (height > maxDim) {
+                            width *= maxDim / height;
+                            height = maxDim;
+                        }
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    // High-quality JPEG compression (0.75) for optimal POS hardware scanning later
+                    const compressedBase64 = canvas.toDataURL('image/jpeg', 0.75);
+                    
+                    document.getElementById(hiddenInputId).value = compressedBase64;
+                    document.getElementById(imgElementId).src = compressedBase64;
+                    
+                    // Show preview container element
+                    let previewContainer = '';
+                    let placeholder = '';
+                    if (imgElementId.includes('front')) {
+                        previewContainer = 'front-preview-container';
+                        placeholder = 'front-placeholder';
+                    } else if (imgElementId.includes('barcode')) {
+                        previewContainer = 'barcode-preview-container';
+                        placeholder = 'barcode-placeholder';
+                    } else {
+                        previewContainer = 'recipe-preview-container';
+                        placeholder = 'recipe-placeholder';
+                    }
+                    
+                    document.getElementById(previewContainer).classList.remove('hidden');
+                    document.getElementById(placeholder).classList.add('hidden');
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // Clears specific image input files
+        function clearImage(inputId, imgId, hiddenId, placeholderId, containerId) {
+            document.getElementById(inputId).value = "";
+            document.getElementById(imgId).src = "";
+            document.getElementById(hiddenId).value = "";
+            document.getElementById(containerId).classList.add('hidden');
+            document.getElementById(placeholderId).classList.remove('hidden');
+        }
+
+        // Resets the input fields
+        function clearActiveForm() {
+            document.getElementById('field-upc').value = "";
+            document.getElementById('field-plu').value = "";
+            document.getElementById('field-isbn').value = "";
+            document.getElementById('field-qr').value = "";
+            document.getElementById('field-source').value = "";
+            
+            // Shelf Form Resets
+            document.getElementById('shelf-location').value = "";
+            document.getElementById('shelf-notes').value = "";
+            clearImage('camera-front', 'front-preview', 'front-data', 'front-placeholder', 'front-preview-container');
+            clearImage('camera-barcode', 'barcode-preview', 'barcode-data', 'barcode-placeholder', 'barcode-preview-container');
+
+            // Recipe Form Resets
+            document.getElementById('recipe-price').value = "";
+            document.getElementById('recipe-qty').value = "";
+            document.getElementById('recipe-role').value = "";
+            clearImage('camera-recipe', 'recipe-preview', 'recipe-img-data', 'recipe-placeholder', 'recipe-preview-container');
+
+            clearIndicators();
+        }
+
+        // Persist structured model record
+        function saveActiveRecord() {
+            const record = {
+                id: Date.now().toString(),
+                upc: document.getElementById('field-upc').value.trim(),
+                plu: document.getElementById('field-plu').value.trim(),
+                isbn: document.getElementById('field-isbn').value.trim(),
+                qr: document.getElementById('field-qr').value.trim(),
+                source: document.getElementById('field-source').value.trim() || 'Unspecified Vendor'
+            };
+
+            // Assert at least one identifier exists
+            if (!record.upc && !record.plu && !record.isbn && !record.qr) {
+                alert("Please scan or manually input at least one barcode/code.");
+                return;
+            }
+
+            if (currentWorkflow === 'shelf') {
+                record.location = document.getElementById('shelf-location').value.trim() || 'Unassigned Location';
+                record.notes = document.getElementById('shelf-notes').value.trim() || '';
+                record.imgFront = document.getElementById('front-data').value || null;
+                record.imgBarcode = document.getElementById('barcode-data').value || null;
+                database.shelf.push(record);
+            } else {
+                record.price = parseFloat(document.getElementById('recipe-price').value) || 0.00;
+                record.qty = document.getElementById('recipe-qty').value.trim() || '1 Unit';
+                record.role = document.getElementById('recipe-role').value.trim() || 'General Ingredient';
+                record.imgRecipe = document.getElementById('recipe-img-data').value || null;
+                database.recipe.push(record);
+            }
+
+            // Sync to local browser storage
+            localStorage.setItem('rugged_scanner_db', JSON.stringify(database));
+            
+            clearActiveForm();
+            renderTable();
+            triggerToast("Logged successfully into registry!");
+        }
+
+        // Deletes a single index record from memory
+        function deleteRecord(id) {
+            database[currentWorkflow] = database[currentWorkflow].filter(r => r.id !== id);
+            localStorage.setItem('rugged_scanner_db', JSON.stringify(database));
+            renderTable();
+        }
+
+        // Wipe Database Records
+        function clearDatabase() {
+            if (confirm(`Wipe all stored records in the ${currentWorkflow.toUpperCase()} dataset?`)) {
+                database[currentWorkflow] = [];
+                localStorage.setItem('rugged_scanner_db', JSON.stringify(database));
+                renderTable();
+            }
+        }
+
+        // Renders visual data listing rows
+        function renderTable() {
+            const list = database[currentWorkflow];
+            const tbody = document.getElementById('registry-table-body');
+            const placeholder = document.getElementById('no-records-placeholder');
+            const counter = document.getElementById('record-count');
+
+            counter.innerText = list.length;
+            tbody.innerHTML = '';
+
+            if (list.length === 0) {
+                placeholder.classList.remove('hidden');
+                return;
+            } else {
+                placeholder.classList.add('hidden');
+            }
+
+            list.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50 transition border-b border-slate-100";
+                
+                // Construct primary key cells
+                let codeDetails = [];
+                if (item.upc) codeDetails.push(`<span class="font-extrabold text-slate-900">UPC:</span> ${item.upc}`);
+                if (item.plu) codeDetails.push(`<span class="font-extrabold text-slate-900">PLU:</span> ${item.plu}`);
+                if (item.isbn) codeDetails.push(`<span class="font-extrabold text-slate-900">ISBN:</span> ${item.isbn}`);
+                if (item.qr) codeDetails.push(`<span class="font-extrabold text-indigo-700">QR:</span> ${item.qr}`);
+                
+                const codesHtml = codeDetails.join('<br>');
+
+                if (currentWorkflow === 'shelf') {
+                    // Render Item Thumbnail
+                    const thumbImg = item.imgFront 
+                        ? `<img src="${item.imgFront}" class="w-10 h-10 object-cover rounded-lg shadow-sm border border-slate-200">`
+                        : `<div class="w-10 h-10 bg-slate-200 rounded-lg flex items-center justify-center text-[10px] text-slate-500 font-bold">N/A</div>`;
+                    
+                    const notesField = item.notes ? `<p class="text-xs text-slate-500 italic mt-0.5">${item.notes}</p>` : '';
+                    const sourceBadge = `<span class="inline-block mt-1 text-[10px] bg-indigo-50 border border-slate-200 text-indigo-900 font-bold px-1.5 py-0.5 rounded">${item.source}</span>`;
+                    const photoStatus = `<div class="flex space-x-1.5 mt-1">
+                        <span class="text-[9px] px-1.5 py-0.5 rounded font-bold ${item.imgFront ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}">PKG</span>
+                        <span class="text-[9px] px-1.5 py-0.5 rounded font-bold ${item.imgBarcode ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}">TAG</span>
+                    </div>`;
+
+                    tr.innerHTML = `
+                        <td class="p-4 align-middle">${thumbImg}</td>
+                        <td class="p-4 font-mono text-xs leading-relaxed">${codesHtml}</td>
+                        <td class="p-4 align-middle font-bold text-slate-700">
+                            <div>${item.location}</div>
+                            ${sourceBadge}
+                        </td>
+                        <td class="p-4 align-middle">${photoStatus}${notesField}</td>
+                        <td class="p-4 align-middle text-center">
+                            <button onclick="deleteRecord('${item.id}')" class="text-slate-400 hover:text-red-600 transition p-1">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            </button>
+                        </td>
+                    `;
+                } else {
+                    // Recipe Row Rendering with dynamic image thumbnail preview
+                    const thumbImg = item.imgRecipe 
+                        ? `<img src="${item.imgRecipe}" class="w-10 h-10 object-cover rounded-lg shadow-sm border border-slate-200">`
+                        : `<div class="w-10 h-10 bg-slate-200 rounded-lg flex items-center justify-center text-[10px] text-slate-500 font-bold">N/A</div>`;
+
+                    tr.innerHTML = `
+                        <td class="p-4 align-middle">${thumbImg}</td>
+                        <td class="p-4 font-mono text-xs leading-relaxed">${codesHtml}</td>
+                        <td class="p-4 align-middle">
+                            <div class="font-black text-indigo-950">${item.role}</div>
+                            <div class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">${item.source}</div>
+                        </td>
+                        <td class="p-4 align-middle text-right font-bold text-emerald-700">
+                            <div>$${item.price.toFixed(2)}</div>
+                            <div class="text-[10px] text-slate-450 font-normal mt-0.5">Qty: ${item.qty}</div>
+                        </td>
+                        <td class="p-4 align-middle text-center">
+                            <button onclick="deleteRecord('${item.id}')" class="text-slate-400 hover:text-red-600 transition p-1">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            </button>
+                        </td>
+                    `;
+                }
+
+                tbody.appendChild(tr);
+            });
+        }
+
+        // Print & Layout Export Pipeline
+        function triggerPrintExport() {
+            // Check for records to export
+            if (database[currentWorkflow].length === 0) {
+                alert(`Your ${currentWorkflow.toUpperCase()} dataset is empty. Scan items before generating documents.`);
+                return;
+            }
+
+            // Generate chronological formatting string for title and file download defaults
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            
+            const timestamp = `${year}-${month}-${day}_${hours}${minutes}`;
+            const displayDateString = now.toLocaleDateString(undefined, {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+
+            // Dynamically alter HTML Document Title for PDF defaults
+            document.title = `Eds_Own_Booper_${timestamp}`;
+
+            // Update print sheet layouts
+            if (currentWorkflow === 'shelf') {
+                document.getElementById('print-sheet-shelf').classList.remove('hidden');
+                document.getElementById('print-sheet-recipe').classList.add('hidden');
+                
+                const shelfPrintPages = document.getElementById('print-shelf-pages');
+                shelfPrintPages.innerHTML = '';
+                
+                database.shelf.forEach((item) => {
+                    let codeDetails = [];
+                    if (item.upc) codeDetails.push(`UPC: ${item.upc}`);
+                    if (item.plu) codeDetails.push(`PLU: ${item.plu}`);
+                    if (item.isbn) codeDetails.push(`ISBN: ${item.isbn}`);
+                    if (item.qr) codeDetails.push(`QR: ${item.qr}`);
+                    
+                    const codesText = codeDetails.join(' | ');
+                    
+                    const frontImgHtml = item.imgFront 
+                        ? `<img src="${item.imgFront}" class="max-w-full max-h-full object-contain mx-auto rounded shadow-sm">`
+                        : `<span class="text-slate-400 italic font-medium text-xs">No Front Package Photo Captured</span>`;
+                    
+                    // Large barcode visualization to be parsed easily by POS systems
+                    const barcodeImgHtmlLarge = item.imgBarcode 
+                        ? `<img src="${item.imgBarcode}" class="max-w-full max-h-full object-contain mx-auto rounded">`
+                        : `<span class="text-red-500 font-extrabold italic text-xs">NO BARCODE PHOTO CAPTURED</span>`;
+
+                    // Generate one full page layout
+                    const pageDiv = document.createElement('div');
+                    pageDiv.className = "print-page-break border-4 border-slate-950 bg-white";
+                    
+                    pageDiv.innerHTML = `
+                        <!-- Page Header -->
+                        <div class="border-b-4 border-indigo-950 pb-3 flex justify-between items-end">
+                            <div>
+                                <h1 class="text-3xl font-black text-indigo-950 tracking-tight uppercase">Ed's Own Booper</h1>
+                                <p class="text-xs text-slate-500 font-black uppercase tracking-wider">Item Tag Matrix &amp; Placement Sheet</p>
+                            </div>
+                            <div class="text-right">
+                                <span class="text-sm bg-indigo-950 text-white font-black px-4 py-1.5 rounded uppercase tracking-wider">SHELF LOC: ${item.location}</span>
+                            </div>
+                        </div>
+
+                        <!-- Main Core Layout (Structured grid container with flex alignment) -->
+                        <div class="grid grid-cols-2 gap-8 my-auto items-stretch flex-grow pt-6 overflow-hidden">
+                            <!-- Left: Metadata Specification Card -->
+                            <div class="flex flex-col justify-between space-y-6">
+                                <div class="space-y-3">
+                                    <h3 class="text-xs font-black text-slate-400 uppercase tracking-widest border-b pb-1">Primary Identifiers</h3>
+                                    <div class="font-mono text-base leading-relaxed text-slate-900 bg-slate-50 p-4 rounded border border-slate-200 font-bold">
+                                        ${codesText || '<span class="text-slate-400 italic">No Codes Logged</span>'}
+                                    </div>
+                                </div>
+
+                                <div class="space-y-3">
+                                    <h3 class="text-xs font-black text-slate-400 uppercase tracking-widest border-b pb-1">Tag Matrix Specifications</h3>
+                                    <div class="text-sm space-y-3">
+                                        <p><span class="font-extrabold text-slate-500 uppercase tracking-wider text-xs">Target Location:</span> <span class="font-black text-xl text-slate-950 block mt-0.5">${item.location}</span></p>
+                                        <p><span class="font-extrabold text-slate-500 uppercase tracking-wider text-xs">Source / Supplier:</span> <span class="font-bold text-base text-indigo-900 block mt-0.5">${item.source}</span></p>
+                                        <p><span class="font-extrabold text-slate-500 uppercase tracking-wider text-xs block mb-1">Workflow Notes:</span></p>
+                                        <div class="border border-slate-300 p-3 bg-slate-50 rounded italic text-slate-700 min-h-[90px] text-xs">
+                                            ${item.notes || 'No notes logged for this product placement.'}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="mt-auto border-t border-dashed border-slate-300 pt-3">
+                                    <span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Ed's Own Booper Dynamic Printing Module</span>
+                                </div>
+                            </div>
+
+                            <!-- Right: High-Contrast Scannable Images with robust viewport flex constraints -->
+                            <div class="flex flex-col justify-between gap-4 h-full min-h-0 overflow-hidden">
+                                <!-- Package Reference -->
+                                <div class="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-slate-300 rounded p-2 bg-slate-50 min-h-0 overflow-hidden">
+                                    <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Item Packaging Front View</span>
+                                    <div class="flex-1 flex items-center justify-center w-full h-full min-h-0 overflow-hidden">
+                                        ${frontImgHtml}
+                                    </div>
+                                </div>
+
+                                <!-- HIGH RESOLUTION SCANNABLE TAG (POS SCANNABLE DIRECTLY OFF SHEET) -->
+                                <div class="flex-1 flex flex-col items-center justify-center border-4 border-slate-950 rounded p-4 bg-white shadow-sm min-h-0 overflow-hidden">
+                                    <div class="flex-1 flex items-center justify-center w-full h-full min-h-0 overflow-hidden">
+                                        ${barcodeImgHtmlLarge}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Page Footer -->
+                        <div class="border-t-2 border-slate-300 pt-3 flex justify-between text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-4">
+                            <span>Booper Sheet ID: ${item.id}</span>
+                            <span>Processed: ${displayDateString}</span>
+                        </div>
+                    `;
+                    shelfPrintPages.appendChild(pageDiv);
+                });
+
+            } else {
+                document.getElementById('print-sheet-shelf').classList.add('hidden');
+                document.getElementById('print-sheet-recipe').classList.remove('hidden');
+                document.getElementById('print-recipe-date').innerText = displayDateString;
+                
+                const recipePrintTbody = document.getElementById('print-recipe-tbody');
+                recipePrintTbody.innerHTML = '';
+                
+                let grandTotal = 0;
+                
+                database.recipe.forEach(item => {
+                    let codeDetails = [];
+                    if (item.upc) codeDetails.push(`UPC: ${item.upc}`);
+                    if (item.plu) codeDetails.push(`PLU: ${item.plu}`);
+                    if (item.isbn) codeDetails.push(`ISBN: ${item.isbn}`);
+                    if (item.qr) codeDetails.push(`QR: ${item.qr}`);
+                    const codesText = codeDetails.join(' | ');
+
+                    const itemCost = item.price;
+                    grandTotal += itemCost;
+
+                    const ingredientImgHtml = item.imgRecipe 
+                        ? `<img src="${item.imgRecipe}" class="w-12 h-12 object-cover border border-slate-300 mx-auto rounded shadow-sm">`
+                        : `<span class="text-slate-400 italic">No Photo</span>`;
+
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="p-3 border border-slate-300 text-center align-middle">${ingredientImgHtml}</td>
+                        <td class="p-3 border border-slate-300 font-black text-slate-950 text-sm align-middle">${item.role}</td>
+                        <td class="p-3 border border-slate-300 font-bold text-indigo-900 align-middle">${item.source}</td>
+                        <td class="p-3 border border-slate-300 font-mono text-slate-500 align-middle">${codesText}</td>
+                        <td class="p-3 border border-slate-300 text-right font-bold text-slate-700 align-middle">$${item.price.toFixed(2)}</td>
+                        <td class="p-3 border border-slate-300 text-right font-medium align-middle">${item.qty}</td>
+                        <td class="p-3 border border-slate-300 text-right font-black text-slate-950 text-sm align-middle">$${itemCost.toFixed(2)}</td>
+                    `;
+                    recipePrintTbody.appendChild(row);
+                });
+
+                document.getElementById('print-total-cost').innerText = `$${grandTotal.toFixed(2)}`;
+            }
+
+            // Trigger system's native Print configuration
+            window.print();
+        }
+    </script>
+</body>
+</html>
